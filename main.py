@@ -10,7 +10,8 @@ app = Flask(__name__)
 t_last_seen = {}
 # 2) Armazena histórico de mensagens para cada usuário
 user_sessions = {}
-
+# 4) Marca usuários que solicitaram atendimento humano
+waiting_for_human = set()
 # 3) Carrega prompt de sistema (texto base para o assistente) — sem saudações
 with open("dognerd_whatsapp_prompt.py", "r") as f:
     original_prompt = f.read()
@@ -70,10 +71,27 @@ def whatsapp_reply():
         return "", 200
     # ─────────────────────────────────────────────────────────
 
-    incoming = request.values.get('Body', '').strip()
+        incoming = request.values.get('Body', '').strip()
     user = request.values.get('From', '')
     prev = t_last_seen.get(user)
     t_last_seen[user] = now
+
+    # Se o cliente digitar "humano" no horário comercial, o bot responde e se silencia
+    if "humano" in incoming.lower() and is_human_hours(now):
+        send_whatsapp_message(user, "Um instante que já já vem um humano falar com você 😉")
+        waiting_for_human.add(user)
+        return "", 200
+
+    # Se o usuário estiver aguardando humano, o bot fica em silêncio
+    if user in waiting_for_human:
+        return "", 200
+
+    # Se passaram mais de 8h desde a última interação, reseta sessão e desbloqueia o usuário
+    if not prev or (now - prev > timedelta(hours=8)):
+        user_sessions[user] = []
+        waiting_for_human.discard(user)
+        save_message(user, SYSTEM_PROMPT['role'], SYSTEM_PROMPT['content'])
+
 
     # prepara versão limpa para checar trigger
     incoming_clean = incoming.lower().strip().rstrip("?!")
