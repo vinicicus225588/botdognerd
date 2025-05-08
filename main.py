@@ -10,18 +10,19 @@ app = Flask(__name__)
 t_last_seen = {}
 # 2) Armazena histórico de mensagens para cada usuário
 user_sessions = {}
-# 4) Marca usuários que solicitaram atendimento humano
+# 3) Marca usuários que solicitaram atendimento humano
 waiting_for_human = set()
-# 3) Carrega prompt de sistema (texto base para o assistente) — sem saudações
+
+# 4) Carrega prompt de sistema (texto base para o assistente) — sem saudações
 with open("dognerd_whatsapp_prompt.py", "r") as f:
     original_prompt = f.read()
 
-# 3.1) Impede saudações automáticas do prompt
+# 4.1) Impede saudações automáticas do prompt
 NO_GREET = "🚫 Atenção: não inclua nenhuma saudação ou 'bom dia/boa noite' automática.\n\n"
 SYSTEM_PROMPT_CONTENT = NO_GREET + original_prompt
 SYSTEM_PROMPT = {"role": "system", "content": SYSTEM_PROMPT_CONTENT}
 
-# 3.2) Lista de frases que não devem aparecer nas respostas
+# 4.2) Lista de frases que não devem aparecer nas respostas
 PROHIBITED_PHRASES = [
     "Oi! Como posso te ajudar hoje?",
     "Oi, como posso te ajudar hoje?",
@@ -38,25 +39,18 @@ GREETING_TRIGGERS = {
 }
 
 def sanitize_reply(text: str) -> str:
-    """Remove qualquer frase indesejada do texto de resposta."""
     for phrase in PROHIBITED_PHRASES:
         text = text.replace(phrase, "")
     return text.strip()
 
 def get_history(user_id):
-    """Retorna a sessão de mensagens do usuário, criando se não existir"""
     return user_sessions.setdefault(user_id, [])
 
 def save_message(user_id, role, content):
-    """Adiciona uma mensagem ao histórico do usuário"""
     get_history(user_id).append({"role": role, "content": content})
 
 def is_human_hours(now: datetime) -> bool:
-    """
-    Retorna True se for de segunda a sexta (weekday 0–4)
-    e entre 09:00 e 19:00.
-    """
-    return now.weekday() < 5 and time(18, 0) <= now.time() < time(19, 0)
+    return now.weekday() < 5 and time(9, 0) <= now.time() < time(19, 0)
 
 @app.route('/')
 def home():
@@ -66,12 +60,7 @@ def home():
 def whatsapp_reply():
     now = datetime.now()
 
-    # ──────────── Desliga o bot em horário humano ────────────
-    if is_human_hours(now):
-        return "", 200
-    # ─────────────────────────────────────────────────────────
-
-        incoming = request.values.get('Body', '').strip()
+    incoming = request.values.get('Body', '').strip()
     user = request.values.get('From', '')
     prev = t_last_seen.get(user)
     t_last_seen[user] = now
@@ -92,16 +81,11 @@ def whatsapp_reply():
         waiting_for_human.discard(user)
         save_message(user, SYSTEM_PROMPT['role'], SYSTEM_PROMPT['content'])
 
-
-    # prepara versão limpa para checar trigger
     incoming_clean = incoming.lower().strip().rstrip("?!")
 
-    # Se é hiato >8h ou trigger de saudação, envia nossos 2 balões
-    if (not prev or (now - prev > timedelta(hours=8))) or (incoming_clean in GREETING_TRIGGERS):
-        user_sessions[user] = []
+    if incoming_clean in GREETING_TRIGGERS:
         save_message(user, SYSTEM_PROMPT['role'], SYSTEM_PROMPT['content'])
 
-        # Balão 1
         part1 = (
             "Oiee! 🐶 Aqui é o Dog Nerdson falando! Bão? "
             "Tô de plantão de 19:00 às 9:00 am e pego finais de semana tb! Quase um doutô! 👨‍⚕️ 😇"
@@ -109,10 +93,8 @@ def whatsapp_reply():
         save_message(user, 'assistant', part1)
         send_whatsapp_message(user, part1)
 
-        # espera 4,5 segundos
         sleep_time.sleep(4.5)
 
-        # Balão 2
         part2 = (
             "Me mande a sua dúvida que eu manjo de todos os paranauês da DogNerd. "
             "Sei ajudar nas medidas, no prazo ou no que precisar!\n\n"
@@ -123,7 +105,6 @@ def whatsapp_reply():
 
         return "", 200
 
-    # Processa mídia de áudio
     if request.values.get("NumMedia") != "0":
         media_url = request.values.get("MediaUrl0")
         media_type = request.values.get("MediaContentType0")
@@ -140,7 +121,6 @@ def whatsapp_reply():
             send_whatsapp_message(user, reply)
             return "", 200
 
-    # Processa texto
     if incoming:
         save_message(user, 'user', incoming)
         reply = sanitize_reply(get_openai_response(user))
@@ -167,7 +147,6 @@ def transcribe_audio(audio_url):
     return None
 
 def get_openai_response(user_id):
-    """Gera resposta usando todo o histórico de mensagens salvas do usuário"""
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return "Erro: chave da OpenAI não encontrada."
