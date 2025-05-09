@@ -96,7 +96,7 @@ def whatsapp_reply():
         sleep_time.sleep(4.5)
 
         part2 = (
-            "Me mande a sua dúvida que eu manjo de todos os paranauês da DogNerd. "
+            "Me mande a sua dúvida que eu manjo de todos os paranauês da DogNerd.🧙 "
             "Sei ajudar nas medidas, no prazo ou no que precisar!\n\n"
             "Se der ruim, meus humanos te chamam no horário comercial! 😁"
         )
