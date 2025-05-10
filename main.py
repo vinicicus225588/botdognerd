@@ -188,8 +188,8 @@ def get_openai_response(user_id):
 def send_whatsapp_message(to, body):
     account_sid = os.getenv("TWILIO_ACCOUNT_SID")
     auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_whatsapp_number = 'whatsapp:+14155238886'
-
+    from_whatsapp_number = 'whatsapp:+553192148615'
+    
     if not account_sid or not auth_token:
         print("Erro: credenciais da Twilio ausentes.")
         return False
@@ -198,13 +198,17 @@ def send_whatsapp_message(to, body):
         url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json'
         data = {'From': from_whatsapp_number, 'To': to, 'Body': body}
         response = requests.post(url, data=data, auth=(account_sid, auth_token), timeout=10)
-        if response.status_code == 201:
-            print("Mensagem enviada com sucesso!")
-            return True
-        else:
-            print(f"Erro ao enviar mensagem: {response.status_code}")
-            print(f"Resposta: {response.text}")
+
+        if response.status_code != 201:
+            print("Erro ao enviar mensagem para o número:", to)
+            print("Corpo da mensagem:", body)
+            print("Status:", response.status_code)
+            print("Resposta:", response.text)
             return False
+
+        print("Mensagem enviada com sucesso!")
+        return True
+
     except Exception as e:
         print(f"Erro ao conectar com Twilio: {str(e)}")
         return False
